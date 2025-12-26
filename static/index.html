@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRYPTO-LOGIC</title>
+
+    <!-- Chart.js & Financial Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1"></script>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;400;700&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                        sans: ['"Rajdhani"', 'sans-serif'],
+                    },
+                    colors: {
+                        bg: '#050510',
+                        panel: 'rgba(15, 23, 42, 0.6)',
+                        primary: '#22d3ee', // Cyan
+                        secondary: '#818cf8', // Indigo
+                        accent: '#f472b6', // Pink
+                        success: '#4ade80',
+                        danger: '#ef4444',
+                        warning: '#facc15',
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'spin-slow': 'spin 12s linear infinite',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #050510;
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+
+        /* Glassmorphism & Cyberpunk Borders */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .glass-panel:hover {
+            border-color: rgba(34, 211, 238, 0.2);
+            box-shadow: 0 0 15px rgba(34, 211, 238, 0.1);
+        }
+
+        .corner-accents::before {
+            content: ''; position: absolute; top: -1px; left: -1px; width: 8px; height: 8px;
+            border-top: 2px solid rgba(34, 211, 238, 0.6); border-left: 2px solid rgba(34, 211, 238, 0.6);
+        }
+        .corner-accents::after {
+            content: ''; position: absolute; bottom: -1px; right: -1px; width: 8px; height: 8px;
+            border-bottom: 2px solid rgba(34, 211, 238, 0.6); border-right: 2px solid rgba(34, 211, 238, 0.6);
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        ::-webkit-scrollbar-thumb { background: rgba(34, 211, 238, 0.2); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(34, 211, 238, 0.4); }
+
+        /* Animations */
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        @keyframes ticker {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .animate-ticker { animation: ticker 30s linear infinite; }
+        .animate-ticker:hover { animation-play-state: paused; }
+
+        .scan-beam {
+            position: absolute; inset: 0; pointer-events: none; z-index: 50;
+            background: linear-gradient(to bottom, transparent, rgba(34, 211, 238, 0.05), transparent);
+            animation: scanline 6s linear infinite;
+        }
+        
+        .text-glow { text-shadow: 0 0 10px rgba(34, 211, 238, 0.5); }
+        .text-glow-red { text-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+        .text-glow-green { text-shadow: 0 0 10px rgba(74, 222, 128, 0.5); }
+
+        /* Chart Container */
+        .chart-container { position: relative; height: 100%; width: 100%; }
+    </style>
+</head>
+
+<body class="h-screen w-screen flex flex-col text-sm font-sans selection:bg-cyan-500/30">
+
+    <!-- Background FX -->
+    <canvas id="bg-canvas" class="fixed inset-0 pointer-events-none z-[-1] opacity-40"></canvas>
+    <div class="fixed inset-0 pointer-events-none scan-beam"></div>
+
+    <!-- HEADER -->
+    <header class="h-14 border-b border-white/5 bg-bg/80 backdrop-blur-md flex items-center justify-between px-6 z-40">
+        <div class="flex items-center gap-4">
+            <div class="w-8 h-8 rounded bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
+                <span class="material-symbols-outlined text-cyan-400 text-lg">hub</span>
+            </div>
+            <h1 class="text-lg font-bold tracking-[0.2em] text-white font-mono">CRYPTO-LOGIC</h1>
+        </div>
+
+        <!-- Global Ticker -->
+        <div class="hidden md:flex flex-1 mx-8 overflow-hidden relative h-6 mask-gradient">
+            <div class="absolute whitespace-nowrap flex gap-12 animate-ticker" id="ticker-strip">
+                <!-- Ticker items injected via JS -->
+            </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <button class="p-2 hover:bg-white/5 rounded-full transition-colors relative">
+                <span class="material-symbols-outlined text-gray-400">notifications</span>
+                <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+                <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 border border-white/10"></div>
+        </div>
+    </header>
+
+    <!-- MAIN LAYOUT -->
+    <div class="flex-1 flex overflow-hidden relative">
+        
+        <!-- SIDEBAR: Watchlist & Nav -->
+        <aside class="w-64 border-r border-white/5 bg-bg/50 flex flex-col z-30 hidden md:flex">
+            <div class="p-4">
+                <h3 class="text-xs font-mono text-gray-500 mb-4 px-2">WATCHLIST</h3>
+                <div class="space-y-2" id="watchlist-container">
+                    <!-- Watchlist Items Generated via JS -->
+                </div>
+            </div>
+            
+            <div class="mt-auto p-4 border-t border-white/5">
+                <div class="glass-panel p-3 rounded-lg corner-accents">
+                    <div class="text-xs text-gray-400 font-mono mb-1">PORTFOLIO VALUE</div>
+                    <div class="text-xl font-bold text-white font-mono">$12,450.32</div>
+                    <div class="text-xs text-green-400 font-mono">+2.4% (24h)</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- CENTER: Charts & Analysis -->
+        <main class="flex-1 flex flex-col min-w-0 bg-gradient-to-b from-transparent to-blue-900/5 relative overflow-y-auto md:overflow-hidden">
+            
+            <!-- Mobile Watchlist (Horizontal Scroll) -->
+            <div class="md:hidden flex overflow-x-auto gap-3 p-4 border-b border-white/5 bg-bg/50 scrollbar-hide shrink-0" id="mobile-watchlist">
+                <!-- Injected via JS -->
+            </div>
+
+            <!-- Toolbar -->
+            <div class="h-12 border-b border-white/5 flex items-center justify-between px-4 md:px-6 shrink-0">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-xl md:text-2xl font-bold text-white font-mono tracking-tight" id="active-symbol">BTC-USDT</h2>
+                    <span class="px-2 py-0.5 rounded bg-green-500/10 text-green-400 text-xs font-mono border border-green-500/20" id="active-change">+0.00%</span>
+                </div>
+                
+                <div class="flex bg-white/5 rounded p-1 gap-1">
+                    <button onclick="changeTimeframe('1H')" id="btn-1h" class="px-2 md:px-3 py-1 rounded bg-white/10 text-[10px] md:text-xs text-white font-mono transition-colors">1H</button>
+                    <button onclick="changeTimeframe('4H')" id="btn-4h" class="px-2 md:px-3 py-1 rounded hover:bg-white/5 text-[10px] md:text-xs text-gray-400 font-mono transition-colors">4H</button>
+                    <button onclick="changeTimeframe('1D')" id="btn-1d" class="px-2 md:px-3 py-1 rounded hover:bg-white/5 text-[10px] md:text-xs text-gray-400 font-mono transition-colors">1D</button>
+                </div>
+            </div>
+
+            <!-- Content Grid -->
+            <div class="flex-1 p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 md:overflow-y-auto">
+                
+                <!-- Main Chart Area -->
+                <div class="lg:col-span-2 flex flex-col gap-6">
+                    <!-- Price Chart -->
+                    <div class="glass-panel rounded-xl p-1 flex-1 min-h-[300px] md:min-h-[400px] flex flex-col corner-accents">
+                        <div class="absolute top-4 left-4 z-10 flex gap-4">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                                <span class="text-xs text-gray-400 font-mono">PRICE</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                                <span class="text-xs text-gray-400 font-mono">LSTM PROJECTION</span>
+                            </div>
+                        </div>
+                        <div class="chart-container flex-1">
+                            <canvas id="mainChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Decision Tree Logic Flow -->
+                    <div class="glass-panel rounded-xl p-6 relative overflow-hidden group min-h-[320px]">
+                        <div class="flex justify-between items-center mb-8">
+                            <h3 class="text-xs font-mono text-cyan-400 flex items-center gap-2">
+                                <span class="material-symbols-outlined text-sm">account_tree</span>
+                                LOGIC_PATH // VISUALIZER
+                            </h3>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-center gap-y-12 px-4" id="logic-flow-container">
+                            <!-- Logic Nodes Injected Here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Panel: Signals & Vitals -->
+                <div class="flex flex-col gap-6">
+                    
+                    <!-- Primary Signal Card -->
+                    <div class="glass-panel rounded-xl p-6 text-center relative overflow-hidden corner-accents">
+                        <div class="absolute inset-0 bg-gradient-to-b from-cyan-500/5 to-transparent pointer-events-none"></div>
+                        <h3 class="text-xs font-mono text-gray-400 mb-2">AGGREGATE SIGNAL</h3>
+                        <div class="text-5xl font-bold font-mono text-white mb-2 tracking-tighter text-glow" id="primary-signal">NEUTRAL</div>
+                        <div class="flex justify-center gap-4 text-xs font-mono">
+                            <span class="text-gray-400">CONFIDENCE: <span class="text-white" id="signal-confidence">0%</span></span>
+                            <span class="text-gray-400">MODEL: <span class="text-cyan-400">ENSEMBLE</span></span>
+                        </div>
+                        
+                        <!-- Signal Strength Bar -->
+                        <div class="mt-6 h-1.5 bg-gray-800 rounded-full overflow-hidden flex">
+                            <div class="h-full bg-red-500 transition-all duration-1000" style="width: 0%" id="bear-bar"></div>
+                            <div class="h-full bg-gray-700 transition-all duration-1000" style="width: 100%" id="neutral-bar"></div>
+                            <div class="h-full bg-green-500 transition-all duration-1000" style="width: 0%" id="bull-bar"></div>
+                        </div>
+                        <div class="flex justify-between text-[10px] text-gray-500 font-mono mt-1">
+                            <span>BEAR</span>
+                            <span>NEUTRAL</span>
+                            <span>BULL</span>
+                        </div>
+                    </div>
+
+                    <!-- Market Vitals Grid -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="glass-panel p-4 rounded-lg">
+                            <div class="text-[10px] text-gray-500 font-mono mb-1">RSI (14)</div>
+                            <div class="text-2xl font-bold text-white font-mono" id="vital-rsi">--</div>
+                            <div class="h-1 w-full bg-gray-800 mt-2 rounded-full overflow-hidden">
+                                <div class="h-full bg-cyan-400 transition-all" style="width: 50%" id="rsi-bar"></div>
+                            </div>
+                        </div>
+                        <div class="glass-panel p-4 rounded-lg">
+                            <div class="text-[10px] text-gray-500 font-mono mb-1">MACD</div>
+                            <div class="text-2xl font-bold text-white font-mono" id="vital-macd">--</div>
+                            <div class="text-[10px] text-gray-400 mt-1" id="vital-macd-status">NEUTRAL</div>
+                        </div>
+                        <div class="glass-panel p-4 rounded-lg">
+                            <div class="text-[10px] text-gray-500 font-mono mb-1">VOLATILITY</div>
+                            <div class="text-2xl font-bold text-white font-mono" id="vital-vol">--</div>
+                        </div>
+                        <div class="glass-panel p-4 rounded-lg">
+                            <div class="text-[10px] text-gray-500 font-mono mb-1">SENTIMENT</div>
+                            <div class="text-2xl font-bold text-white font-mono" id="vital-sentiment">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Feature Importance List -->
+                    <div class="glass-panel rounded-xl p-4 flex-1 flex flex-col">
+                        <h3 class="text-xs font-mono text-gray-400 mb-4">KEY DRIVERS</h3>
+                        <div class="space-y-3 overflow-y-auto flex-1 pr-2" id="feature-list">
+                            <!-- Features Injected Here -->
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none" id="toast-container"></div>
+
+    <script>
+        // --- STATE MANAGEMENT ---
+        const state = {
+            activeSymbol: 'BTC-USDT',
+            watchlist: ['BTC-USDT', 'ETH-USDT', 'SOL-USDT'],
+            prices: {},
+            predictions: {}, // Store predictions for all watchlist items
+            chartInstance: null,
+            timeframe: '1H'
+        };
+
+        // --- UTILS ---
+        const formatPrice = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+        const formatPct = (n) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+        
+        function showToast(title, msg, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = type === 'success' ? 'border-green-500/50 bg-green-900/80' : 
+                           type === 'danger' ? 'border-red-500/50 bg-red-900/80' : 
+                           'border-cyan-500/50 bg-cyan-900/80';
+            
+            toast.className = `pointer-events-auto w-64 p-3 rounded border ${colors} backdrop-blur-md text-white shadow-lg transform transition-all duration-300 translate-y-10 opacity-0`;
+            toast.innerHTML = `
+                <div class="text-xs font-bold font-mono mb-1">${title}</div>
+                <div class="text-[10px] text-gray-200">${msg}</div>
+            `;
+            
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('translate-y-10', 'opacity-0'));
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // --- CHARTING ---
+        function initChart() {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            
+            // Gradient for Price
+            const gradientPrice = ctx.createLinearGradient(0, 0, 0, 400);
+            gradientPrice.addColorStop(0, 'rgba(34, 211, 238, 0.2)');
+            gradientPrice.addColorStop(1, 'rgba(34, 211, 238, 0)');
+
+            state.chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Price',
+                            data: [],
+                            borderColor: '#22d3ee',
+                            backgroundColor: gradientPrice,
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 4
+                        },
+                        {
+                            label: 'Projection',
+                            data: [],
+                            borderColor: '#c084fc',
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleColor: '#fff',
+                            bodyColor: '#ccc',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: true,
+                            callbacks: {
+                                label: (ctx) => `${ctx.dataset.label}: ${formatPrice(ctx.raw)}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+                        },
+                        y: {
+                            position: 'right',
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 }, callback: (val) => '$' + val }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- DATA FETCHING ---
+        async function fetchAPI(endpoint) {
+            try {
+                const res = await fetch(endpoint);
+                return await res.json();
+            } catch (e) { console.error(e); return null; }
+        }
+
+        async function updateDashboard() {
+            const symbol = state.activeSymbol;
+
+            // 1. Prices
+            const priceData = await fetchAPI('/api/v1/prices');
+            if (priceData && priceData.prices) {
+                state.prices = priceData.prices;
+                
+                // Fetch predictions for all watchlist items
+                await Promise.all(state.watchlist.map(async (sym) => {
+                    const pred = await fetchAPI(`/api/v1/conflict-analysis/${sym}`);
+                    if (pred) {
+                        state.predictions[sym] = pred.consensus_signal.toUpperCase();
+                    }
+                }));
+
+                updateWatchlist();
+                
+                const current = priceData.prices[symbol.split('-')[0]]; // Handle BTC vs BTC-USDT naming mismatch if any
+                if (current) {
+                    document.getElementById('active-symbol').textContent = symbol;
+                    const elChange = document.getElementById('active-change');
+                    elChange.textContent = formatPct(current.change_24h);
+                    elChange.className = `px-2 py-0.5 rounded text-xs font-mono border ${current.change_24h >= 0 ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`;
+                }
+            }
+
+            // 2. LSTM Forecast (Chart Update)
+            const lstmData = await fetchAPI(`/api/v1/lstm/forecast/${symbol}`);
+            if (lstmData && lstmData.forecasts) {
+                const chart = state.chartInstance;
+                const currentPrice = lstmData.current_price;
+                
+                // Mock historical data for visual context (since we don't have a full history API yet)
+                // In a real app, we'd fetch OHLCV history here.
+                let historyPoints = 20;
+                let intervalLabel = 'h';
+                let volatility = 0.05;
+
+                if (state.timeframe === '4H') {
+                    historyPoints = 40;
+                    intervalLabel = 'd'; // Mocking days for 4H view context
+                    volatility = 0.08;
+                } else if (state.timeframe === '1D') {
+                    historyPoints = 60;
+                    intervalLabel = 'w'; // Mocking weeks for 1D view context
+                    volatility = 0.12;
+                }
+
+                const historyLabels = Array.from({length: historyPoints}, (_, i) => `T-${historyPoints-i}${intervalLabel}`);
+                const historyData = Array.from({length: historyPoints}, (_, i) => currentPrice * (1 + (Math.random() - 0.5) * volatility));
+                historyData[historyPoints-1] = currentPrice; // Connect to current
+
+                // Forecast
+                const forecastLabels = lstmData.forecasts.map(f => `+${f.hour}h`);
+                const forecastData = lstmData.forecasts.map(f => f.predicted_price);
+                
+                // Combine for chart
+                // Dataset 0: History + Current
+                // Dataset 1: Current + Forecast (gap bridging)
+                
+                const combinedLabels = [...historyLabels, ...forecastLabels];
+                const combinedHistory = [...historyData, ...Array(forecastLabels.length).fill(null)];
+                const combinedForecast = [...Array(historyPoints-1).fill(null), currentPrice, ...forecastData];
+
+                // Dynamic Color Logic (Red/Green)
+                const shortSym = symbol.split('-')[0];
+                const currentData = state.prices ? state.prices[shortSym] : null;
+                const isBullish = currentData ? currentData.change_24h >= 0 : true;
+                const color = isBullish ? '#4ade80' : '#ef4444'; // Green : Red
+                
+                const ctx = chart.ctx;
+                const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+                gradient.addColorStop(0, isBullish ? 'rgba(74, 222, 128, 0.2)' : 'rgba(239, 68, 68, 0.2)');
+                gradient.addColorStop(1, isBullish ? 'rgba(74, 222, 128, 0)' : 'rgba(239, 68, 68, 0)');
+
+                chart.data.datasets[0].borderColor = color;
+                chart.data.datasets[0].backgroundColor = gradient;
+
+                chart.data.labels = combinedLabels;
+                chart.data.datasets[0].data = combinedHistory;
+                chart.data.datasets[1].data = combinedForecast;
+                chart.update('none'); // Smooth update
+            }
+
+            // 3. Conflict Analysis (Main Signal)
+            const conflictData = await fetchAPI(`/api/v1/conflict-analysis/${symbol}`);
+            if (conflictData) {
+                const sig = conflictData.consensus_signal.toUpperCase();
+                const score = 100 - conflictData.conflict_score;
+                
+                const elSig = document.getElementById('primary-signal');
+                elSig.textContent = sig;
+                document.getElementById('signal-confidence').textContent = Math.round(score) + '%';
+                
+                // Styling
+                elSig.className = `text-5xl font-bold font-mono tracking-tighter mb-2 ${sig === 'BULLISH' ? 'text-green-400 text-glow-green' : sig === 'BEARISH' ? 'text-red-500 text-glow-red' : 'text-white text-glow'}`;
+
+                // Bar Animation
+                const bearBar = document.getElementById('bear-bar');
+                const bullBar = document.getElementById('bull-bar');
+                const neutralBar = document.getElementById('neutral-bar');
+
+                if (sig === 'BULLISH') {
+                    bearBar.style.width = '0%'; bullBar.style.width = `${score}%`; neutralBar.style.width = `${100-score}%`;
+                } else if (sig === 'BEARISH') {
+                    bearBar.style.width = `${score}%`; bullBar.style.width = '0%'; neutralBar.style.width = `${100-score}%`;
+                } else {
+                    bearBar.style.width = '0%'; bullBar.style.width = '0%'; neutralBar.style.width = '100%';
+                }
+            }
+
+            // 4. Decision Tree Logic
+            const treeData = await fetchAPI(`/api/v1/decision-tree/logic-path/${symbol}`);
+            if (treeData && treeData.tree) {
+                renderLogicPath(treeData.tree);
+            }
+
+            // 5. Features
+            const featData = await fetchAPI(`/api/v1/random-forest/feature-impact/${symbol}`);
+            if (featData && featData.ranked_features) {
+                const list = document.getElementById('feature-list');
+                list.innerHTML = featData.ranked_features.slice(0, 6).map(f => `
+                    <div class="flex items-center justify-between group">
+                        <span class="text-[10px] text-gray-400 font-mono uppercase group-hover:text-cyan-400 transition-colors">${f.feature}</span>
+                        <div class="flex items-center gap-2 w-1/2">
+                            <div class="h-1 bg-white/10 rounded-full flex-1 overflow-hidden">
+                                <div class="h-full bg-cyan-500" style="width: ${f.importance * 100}%"></div>
+                            </div>
+                            <span class="text-[9px] text-gray-500 w-8 text-right">${(f.importance * 100).toFixed(0)}%</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // 6. Vitals
+            const vitals = await fetchAPI(`/api/v1/market-vitals/${symbol}`);
+            if (vitals) {
+                document.getElementById('vital-rsi').textContent = vitals.rsi.toFixed(1);
+                document.getElementById('rsi-bar').style.width = `${vitals.rsi}%`;
+                document.getElementById('rsi-bar').className = `h-full transition-all ${vitals.rsi > 70 ? 'bg-red-500' : vitals.rsi < 30 ? 'bg-green-500' : 'bg-cyan-400'}`;
+                
+                document.getElementById('vital-macd').textContent = vitals.macd.toFixed(2);
+                document.getElementById('vital-macd-status').textContent = vitals.macd > 0 ? 'BULLISH MOMENTUM' : 'BEARISH MOMENTUM';
+                document.getElementById('vital-macd-status').className = `text-[10px] mt-1 ${vitals.macd > 0 ? 'text-green-400' : 'text-red-400'}`;
+                
+                document.getElementById('vital-vol').textContent = vitals.volatility.toFixed(2);
+                
+                // Mock Sentiment (since API might not return it in vitals)
+                document.getElementById('vital-sentiment').textContent = 'NEUTRAL'; 
+            }
+        }
+
+        function updateWatchlist() {
+            const container = document.getElementById('watchlist-container');
+            container.innerHTML = state.watchlist.map(sym => {
+                const shortSym = sym.split('-')[0];
+                const data = state.prices[shortSym] || { price: 0, change_24h: 0 };
+                const isActive = sym === state.activeSymbol;
+                const pred = state.predictions[sym] || 'NEUTRAL';
+                const predColor = pred === 'BULLISH' ? 'text-green-400' : pred === 'BEARISH' ? 'text-red-400' : 'text-gray-400';
+                
+                return `
+                    <div onclick="changeSymbol('${sym}')" 
+                         class="p-3 rounded-lg cursor-pointer transition-all border ${isActive ? 'bg-cyan-500/10 border-cyan-500/50' : 'bg-white/5 border-transparent hover:bg-white/10 hover:border-white/10'}">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="font-bold text-white font-mono">${shortSym}</span>
+                            <span class="text-xs font-mono ${data.change_24h >= 0 ? 'text-green-400' : 'text-red-400'}">${formatPct(data.change_24h)}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <div class="text-xs text-gray-400 font-mono">${formatPrice(data.price)}</div>
+                            <div class="text-[10px] font-bold font-mono ${predColor}">${pred}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Update Mobile Watchlist
+            const mobileContainer = document.getElementById('mobile-watchlist');
+            if (mobileContainer) {
+                mobileContainer.innerHTML = state.watchlist.map(sym => {
+                    const shortSym = sym.split('-')[0];
+                    const data = state.prices[shortSym] || { price: 0, change_24h: 0 };
+                    const isActive = sym === state.activeSymbol;
+                    const pred = state.predictions[sym] || 'NEUTRAL';
+                    const predColor = pred === 'BULLISH' ? 'text-green-400' : pred === 'BEARISH' ? 'text-red-400' : 'text-gray-400';
+                    
+                    return `
+                        <div onclick="changeSymbol('${sym}')" 
+                             class="shrink-0 p-2 rounded-lg cursor-pointer transition-all border min-w-[140px] ${isActive ? 'bg-cyan-500/10 border-cyan-500/50' : 'bg-white/5 border-transparent'}">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-bold text-white font-mono text-xs">${shortSym}</span>
+                                <span class="text-[10px] font-mono ${data.change_24h >= 0 ? 'text-green-400' : 'text-red-400'}">${formatPct(data.change_24h)}</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <div class="text-[10px] text-gray-400 font-mono">${formatPrice(data.price)}</div>
+                                <div class="text-[9px] font-bold font-mono ${predColor}">${pred}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            // Update Top Ticker
+            const tickerStrip = document.getElementById('ticker-strip');
+            if (tickerStrip) {
+                // Duplicate list for seamless scrolling
+                const tickerItems = [...state.watchlist, ...state.watchlist, ...state.watchlist].map(sym => {
+                    const shortSym = sym.split('-')[0];
+                    const data = state.prices[shortSym] || { price: 0, change_24h: 0 };
+                    return `
+                        <div class="flex items-center gap-2 font-mono text-xs">
+                            <span class="text-gray-400 font-bold">${shortSym}</span>
+                            <span class="text-white">${formatPrice(data.price)}</span>
+                            <span class="${data.change_24h >= 0 ? 'text-green-400' : 'text-red-400'}">${formatPct(data.change_24h)}</span>
+                        </div>
+                    `;
+                }).join('');
+                tickerStrip.innerHTML = tickerItems;
+            }
+        }
+
+        function changeSymbol(sym) {
+            state.activeSymbol = sym;
+            updateDashboard();
+            showToast('Symbol Changed', `Now tracking ${sym}`);
+        }
+
+        function changeTimeframe(tf) {
+            state.timeframe = tf;
+            
+            // Update Buttons
+            ['1H', '4H', '1D'].forEach(t => {
+                const btn = document.getElementById(`btn-${t.toLowerCase()}`);
+                if (t === tf) {
+                    btn.className = "px-3 py-1 rounded bg-white/10 text-xs text-white font-mono transition-colors";
+                } else {
+                    btn.className = "px-3 py-1 rounded hover:bg-white/5 text-xs text-gray-400 font-mono transition-colors";
+                }
+            });
+
+            updateDashboard();
+            showToast('Timeframe Updated', `Switched to ${tf} view`);
+        }
+
+        function renderLogicPath(node) {
+            const container = document.getElementById('logic-flow-container');
+            let html = '';
+            
+            // Expanded logic path for better visualization
+            const steps = [
+                { label: 'INPUT', val: 'MARKET_DATA', icon: 'dataset' },
+                { label: 'VOLATILITY', val: 'HIGH', icon: 'water_ec' },
+                { label: node.name || 'RSI', val: node.threshold ? `< ${node.threshold}` : 'ANALYZING', icon: 'analytics' },
+                { label: 'MACD', val: 'CROSSOVER', icon: 'show_chart' },
+                { label: 'SENTIMENT', val: 'POSITIVE', icon: 'sentiment_satisfied' },
+                { label: 'DECISION', val: node.value ? node.value[0][0] > 0.5 ? 'BEAR' : 'BULL' : 'PENDING', icon: 'gavel' }
+            ];
+
+            html = steps.map((step, i) => `
+                <div class="flex items-center">
+                    <div class="relative group">
+                        <div class="w-20 h-20 rounded-2xl border border-cyan-500/30 bg-black/40 flex items-center justify-center backdrop-blur-sm shadow-[0_0_20px_rgba(34,211,238,0.15)] group-hover:border-cyan-400 transition-colors">
+                            <span class="material-symbols-outlined text-cyan-400 text-3xl">${step.icon}</span>
+                        </div>
+                        <div class="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-center">
+                            <div class="text-xs text-gray-500 font-mono tracking-wider">${step.label}</div>
+                            <div class="text-xs text-white font-bold font-mono mt-0.5">${step.val}</div>
+                        </div>
+                    </div>
+                    ${i < steps.length - 1 ? '<div class="w-16 h-0.5 bg-gradient-to-r from-cyan-500/50 to-cyan-500/10 mx-4"></div>' : ''}
+                </div>
+            `).join('');
+            
+            container.innerHTML = html;
+        }
+
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            updateDashboard();
+            setInterval(updateDashboard, 5000);
+            
+            // Particle Background
+            const canvas = document.getElementById('bg-canvas');
+            const ctx = canvas.getContext('2d');
+            let particles = [];
+            
+            const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+            window.addEventListener('resize', resize);
+            resize();
+
+            // Create more particles for a denser "live" feel
+            for(let i=0; i<250; i++) particles.push({
+                x: Math.random()*canvas.width, y: Math.random()*canvas.height,
+                vx: (Math.random()-0.5)*1.5, vy: (Math.random()-0.5)*1.5, // Faster movement
+                s: Math.random()*2 + 1 // Slightly larger
+            });
+
+            function animate() {
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                
+                // Draw connections
+                ctx.strokeStyle = 'rgba(34, 211, 238, 0.15)'; // Cyan low opacity
+                ctx.lineWidth = 0.5;
+                
+                for(let i=0; i<particles.length; i++) {
+                    let p = particles[i];
+                    p.x += p.vx; p.y += p.vy;
+                    
+                    // Bounce off edges
+                    if(p.x < 0 || p.x > canvas.width) p.vx *= -1;
+                    if(p.y < 0 || p.y > canvas.height) p.vy *= -1;
+                    
+                    // Draw particle
+                    ctx.fillStyle = '#22d3ee';
+                    ctx.globalAlpha = 0.6;
+                    ctx.beginPath(); ctx.arc(p.x,p.y,p.s,0,Math.PI*2); ctx.fill();
+
+                    // Connect to nearby particles
+                    for(let j=i+1; j<particles.length; j++) {
+                        let p2 = particles[j];
+                        let dx = p.x - p2.x;
+                        let dy = p.y - p2.y;
+                        let dist = Math.sqrt(dx*dx + dy*dy);
+                        
+                        if(dist < 100) {
+                            ctx.beginPath();
+                            ctx.moveTo(p.x, p.y);
+                            ctx.lineTo(p2.x, p2.y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+                requestAnimationFrame(animate);
+            }
+            animate();
+        });
+    </script>
+</body>
+
+</html>
