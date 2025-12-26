@@ -17,6 +17,7 @@ PEP8 Compliant | Highly Commented for Transparency
 
 import logging
 import json
+import warnings
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any, Union
 from dataclasses import dataclass, asdict
@@ -34,8 +35,6 @@ try:
 except ImportError:
     SKLEARN_AVAILABLE = False
     warnings.warn("scikit-learn not available. ML models will be disabled.")
-
-import warnings
 
 # Suppress TensorFlow warnings for cleaner logs
 import os
